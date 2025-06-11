@@ -114,6 +114,12 @@ impl Rational {
 
         Rational::new(numerator, denominator)
     }
+    pub fn numerator(&self) -> i64 {
+        self.numerator
+    }
+    pub fn denominator(&self) -> u32 {
+        self.denominator
+    }
 }
 /// Вычисляет наибольший общий делитель для числителя и знаменателя
 /// Возвращает `Error::Overflow` если результат не помещается в u32
