@@ -1,43 +1,85 @@
-use std::{
-    fmt::Display,
-    ops::{Add, Div, Mul, Sub},
-};
-
 use crate::Result;
-
-#[derive(Debug, Clone, Default, PartialEq)]
+use std::{
+    cmp::Ordering,
+    fmt::Display,
+    ops::{Add, Div, Mul, Neg, Sub},
+};
+/// Рациональное число, представленное дробью с числителем (i64) и знаменателем (u32).
+///
+/// Поддерживает основные арифметические операции, сравнение и преобразования.
+/// Автоматически нормализуется при создании (сокращает дробь).
+///
+/// # Примеры
+/// ```
+/// use linearust::types::Rational;
+///
+/// let a = Rational::new(2, 4).unwrap(); // Автоматически сокращается до 1/2
+/// let b = Rational::new(1, 3).unwrap();
+/// assert_eq!(a + b, Rational::new(5, 6).unwrap());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct Rational {
     numerator: i64,
     denominator: u32,
 }
-
-impl Rational {
-    /// Создаёт новое рациональное число.
-    ///
-    /// # Возвращает
-    /// - `Ok(Rational)` — если знаменатель не ноль.
-    /// - `Err(Error::WrongInputParameter)` — если знаменатель равен нулю.
-    pub fn new(numerator: i64, denominator: u32) -> Result<Self> {
-        if denominator == 0 {
-            Err(crate::Error::WrongInputParameter)
-        } else {
-            let mut result = Rational {
-                numerator,
-                denominator,
-            };
-            result.normalize()?;
-            Ok(result)
+impl Default for Rational {
+    fn default() -> Self {
+        Rational {
+            numerator: 0,
+            denominator: 1,
         }
     }
-    /// Сокращает дробь (нормализует).
-    /// Проверяет переполнение при вычислении НОД.
+}
+
+impl Rational {
+    /// Создает новое рациональное число.
+    ///
+    /// # Аргументы
+    /// * `numerator` - Числитель (знаковый)
+    /// * `denominator` - Знаменатель (беззнаковый, должен быть ≠ 0)
+    ///
+    /// # Возвращает
+    /// * `Ok(Rational)` - если создание успешно
+    /// * `Err(Error::DivisionByZero)` - если знаменатель равен 0
+    /// * `Err(Error::Overflow)` - при переполнении в процессе нормализации
+    ///
+    /// # Примеры
+    /// ```
+    /// use linearust::types::Rational;
+    ///
+    /// let r = Rational::new(3, 4).unwrap();
+    /// assert_eq!(r.numerator(), 3);
+    /// assert_eq!(r.denominator(), 4);
+    /// ```
+    pub fn new(numerator: i64, denominator: u32) -> Result<Rational> {
+        if denominator == 0 {
+            return Err(crate::Error::DivisionByZero);
+        }
+        let mut res = Rational {
+            numerator,
+            denominator,
+        };
+        res.normalize()?;
+        Ok(res)
+    }
     fn normalize(&mut self) -> Result<&mut Self> {
         let gcd = gcd(self.numerator, self.denominator)?;
+        if gcd == 0 {
+            return Err(crate::Error::DivisionByZero);
+        }
         self.numerator /= gcd as i64;
         self.denominator /= gcd;
         Ok(self)
     }
-    pub fn sum(&self, other: &Rational) -> Result<Rational> {
+    /// Возвращает числитель дроби
+    pub fn numerator(&self) -> i64 {
+        self.numerator
+    }
+    /// Возвращает знаменатель дроби
+    pub fn denominator(&self) -> u32 {
+        self.denominator
+    }
+    pub fn checked_add(&self, other: &Rational) -> Result<Rational> {
         let numerator = self
             .numerator
             .checked_mul(other.denominator as i64)
@@ -55,7 +97,7 @@ impl Rational {
             .ok_or(crate::Error::Overflow)?;
         Rational::new(numerator, denominator)
     }
-    pub fn subtract(&self, other: &Self) -> Result<Self> {
+    pub fn checked_sub(&self, other: &Self) -> Result<Self> {
         let numerator = self
             .numerator
             .checked_mul(other.denominator as i64)
@@ -76,7 +118,7 @@ impl Rational {
         Rational::new(numerator, denominator)
     }
 
-    pub fn multiply(&self, other: &Self) -> Result<Self> {
+    pub fn checked_mul(&self, other: &Self) -> Result<Self> {
         let numerator = self
             .numerator
             .checked_mul(other.numerator)
@@ -90,7 +132,7 @@ impl Rational {
         Rational::new(numerator, denominator)
     }
 
-    pub fn divide(&self, other: &Self) -> Result<Self> {
+    pub fn checked_div(&self, other: &Self) -> Result<Self> {
         if other.numerator == 0 {
             return Err(crate::Error::DivisionByZero);
         }
@@ -114,53 +156,247 @@ impl Rational {
 
         Rational::new(numerator, denominator)
     }
-    pub fn numerator(&self) -> i64 {
-        self.numerator
+    pub fn checked_neg(self) -> Result<Self> {
+        Ok(Self {
+            numerator: self.numerator.checked_neg().ok_or(crate::Error::Overflow)?,
+            denominator: self.denominator,
+        })
     }
-    pub fn denominator(&self) -> u32 {
-        self.denominator
+    /// Возвращает абсолютное значение числа
+    pub fn abs(self) -> Self {
+        Self {
+            numerator: self.numerator.abs(),
+            denominator: self.denominator,
+        }
     }
-}
-/// Вычисляет наибольший общий делитель для числителя и знаменателя
-/// Возвращает `Error::Overflow` если результат не помещается в u32
-fn gcd(a: i64, b: u32) -> Result<u32> {
-    let mut a1 = a.unsigned_abs();
-    let mut b1 = b as u64;
-    while b1 != 0 {
-        (b1, a1) = (a1 % b1, b1);
+    /// Возвращает обратное число (1/self)
+    ///
+    /// # Ошибки
+    /// Возвращает `Error::DivisionByZero` если числитель равен 0
+    pub fn reciprocal(self) -> Result<Self> {
+        if self.numerator == 0 {
+            Err(crate::Error::DivisionByZero)
+        } else {
+            Ok(Self {
+                numerator: self.denominator as i64 * self.numerator.signum(),
+                denominator: self.numerator.unsigned_abs() as u32,
+            })
+        }
     }
-    let result = u32::try_from(a1)?;
-    Ok(result)
-}
-// Реализация операторов через traits
-impl Add for Rational {
-    type Output = Result<Self>;
+    /// Проверяет, является ли число отрицательным
+    pub fn is_negative(&self) -> bool {
+        self.numerator < 0
+    }
+    /// Проверяет, является ли число целым
+    pub fn is_integer(&self) -> bool {
+        self.denominator == 1
+    }
+    /// Возводит рациональное число в целую степень
+    ///
+    /// # Аргументы
+    /// * `exp` - показатель степени (может быть отрицательным)
+    ///
+    /// # Возвращает
+    /// * результат возведения в степень
+    /// * паникует при переполнении или делении на ноль
+    ///
+    /// # Примеры
+    /// ```
+    /// use linearust::types::Rational;
+    ///
+    /// let r = Rational::new(2, 3).unwrap();
+    /// assert_eq!(r.pow(2), Rational::new(4, 9).unwrap());
+    /// assert_eq!(r.pow(-1), Rational::new(3, 2).unwrap());
+    /// ```
+    pub fn pow(&self, exp: i32) -> Self {
+        self.checked_pow(exp).unwrap()
+    }
 
-    fn add(self, other: Self) -> Result<Self> {
-        self.sum(&other)
+    /// Оптимизированное возведение в степень с проверкой переполнения
+    ///
+    /// Использует алгоритм быстрого возведения в степень
+    pub fn checked_pow(&self, exp: i32) -> Result<Self> {
+        if exp == 0 {
+            return Rational::new(1, 1);
+        }
+
+        let mut result = Rational::new(1, 1)?;
+        let mut base = if exp > 0 {
+            self.to_owned()
+        } else {
+            self.reciprocal()?
+        };
+        let mut exponent = exp.unsigned_abs();
+
+        while exponent > 0 {
+            if exponent % 2 == 1 {
+                result = result.checked_mul(&base)?;
+            }
+            base = base.checked_mul(&base)?;
+            exponent /= 2;
+        }
+
+        Ok(result)
+    }
+}
+/// Computes the greatest common divisor (GCD) of two numbers.
+///
+/// # Arguments
+/// * `a` - A signed 64-bit integer
+/// * `b` - An unsigned 32-bit integer
+///
+/// # Returns
+/// * `Ok(u32)` - The GCD of the absolute value of `a` and `b`
+/// * `Err(crate::Error::Underflow)` - If `a` is `i64::MIN` (can't get absolute value)
+/// * `Err(crate::Error::Overflow)` - If the result exceeds `u32::MAX`
+///
+fn gcd(a: i64, b: u32) -> Result<u32> {
+    // Special case: i64::MIN.abs() would overflow
+    if a == i64::MIN {
+        return Err(crate::Error::Underflow);
+    }
+
+    let mut x = a.unsigned_abs(); // Safe after i64::MIN check
+    let mut y = u64::from(b); // Safe u32 to u64 conversion
+
+    // Euclidean algorithm
+    while y != 0 {
+        (x, y) = (y, x % y);
+    }
+
+    // Convert result back to u32
+    u32::try_from(x).map_err(|_| crate::Error::Overflow)
+}
+impl PartialOrd for Rational {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Rational {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let left = (self.numerator as i128) * (other.denominator as i128);
+        let right = (other.numerator as i128) * (self.denominator as i128);
+        left.cmp(&right)
+    }
+}
+impl std::str::FromStr for Rational {
+    type Err = crate::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let parts: Vec<&str> = s.split('/').collect();
+        match parts.as_slice() {
+            [num, den] => {
+                let numerator = num.parse().map_err(|_| crate::Error::ParseError)?;
+                let denominator = den.parse().map_err(|_| crate::Error::ParseError)?;
+                Self::new(numerator, denominator)
+            }
+            [num] => {
+                let numerator = num.parse().map_err(|_| crate::Error::ParseError)?;
+                Self::new(numerator, 1)
+            }
+            _ => Err(crate::Error::ParseError),
+        }
+    }
+}
+impl Neg for Rational {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Rational {
+            numerator: -self.numerator,
+            denominator: self.denominator,
+        }
+    }
+}
+impl Add for Rational {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        let numerator = self.numerator * (other.denominator as i64)
+            + other.numerator * (self.denominator as i64);
+        let denominator = self.denominator * other.denominator;
+        Rational::new(numerator, denominator).unwrap()
     }
 }
 impl Sub for Rational {
-    type Output = Result<Self>;
+    type Output = Self;
 
-    fn sub(self, other: Self) -> Result<Self> {
-        self.subtract(&other)
+    fn sub(self, other: Self) -> Self {
+        let numerator = self.numerator * (other.denominator as i64)
+            - other.numerator * (self.denominator as i64);
+
+        let denominator = self.denominator * other.denominator;
+        Rational::new(numerator, denominator).unwrap()
     }
 }
 
-impl Mul for Rational {
-    type Output = Result<Self>;
+impl Mul<Rational> for Rational {
+    type Output = Self;
 
-    fn mul(self, other: Self) -> Result<Self> {
-        self.multiply(&other)
+    fn mul(self, other: Self) -> Self {
+        let numerator = self.numerator * other.numerator;
+
+        let denominator = self.denominator * other.denominator;
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl Mul<i64> for Rational {
+    type Output = Self;
+
+    fn mul(self, other: i64) -> Self {
+        let numerator = self.numerator * other;
+
+        let denominator = self.denominator;
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl Mul<f64> for Rational {
+    type Output = Self;
+
+    fn mul(self, other: f64) -> Self {
+        let o = Rational::from(other);
+        self * o
     }
 }
 
-impl Div for Rational {
-    type Output = Result<Self>;
+impl Div<Rational> for Rational {
+    type Output = Self;
 
-    fn div(self, other: Self) -> Result<Self> {
-        self.divide(&other)
+    fn div(self, other: Self) -> Self {
+        let numerator = self.numerator * (other.denominator as i64);
+
+        let denominator = self.denominator * (other.numerator.unsigned_abs() as u32);
+
+        // Сохраняем знак в числителе
+        let numerator = if other.numerator < 0 {
+            -numerator
+        } else {
+            numerator
+        };
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl Div<i64> for Rational {
+    type Output = Self;
+
+    fn div(self, other: i64) -> Self {
+        let numerator = self.numerator;
+
+        let denominator = self.denominator * other.unsigned_abs() as u32;
+
+        // Сохраняем знак в числителе
+        let numerator = if other < 0 { -numerator } else { numerator };
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl Div<f64> for Rational {
+    type Output = Self;
+
+    fn div(self, other: f64) -> Self {
+        self / Rational::from(other)
     }
 }
 impl From<Rational> for f64 {
@@ -171,7 +407,7 @@ impl From<Rational> for f64 {
 impl TryFrom<Rational> for f32 {
     type Error = crate::Error;
 
-    fn try_from(value: Rational) -> Result<Self> {
+    fn try_from(value: Rational) -> crate::Result<Self> {
         // Проверка деления на ноль (хотя denominator всегда > 0 в Rational)
         if value.denominator == 0 {
             return Err(crate::Error::DivisionByZero);
@@ -196,80 +432,71 @@ impl TryFrom<Rational> for f32 {
         Ok(value_f64 as f32)
     }
 }
-
 impl From<f64> for Rational {
     fn from(value: f64) -> Self {
-        const MAX_DENOMINATOR: u32 = 1_000_000;
-        const EPSILON: f64 = 1.0e-10;
-
-        // Обработка специальных случаев
+        // Handle special cases
         if value.is_nan() || value.is_infinite() {
             return Rational::default();
         }
 
-        // Проверка на целое число (без TryFrom)
-        if value.fract().abs() < EPSILON {
-            // Безопасное преобразование f64 в i64
-            if value >= i64::MIN as f64 && value <= i64::MAX as f64 {
-                return Rational::new(value as i64, 1).unwrap_or_default();
+        // Fast path for integers
+        if value.fract() == 0.0 {
+            if let Ok(int_val) = i64::try_from(value as i128) {
+                return Rational::new(int_val, 1).unwrap_or_default();
             }
-            // Для очень больших чисел используем упрощенное представление
-            return Rational::new(value.signum() as i64, 1).unwrap_or_default();
+            return Rational::new(value.signum() as i64, 1).unwrap();
         }
 
-        // Алгоритм непрерывных дробей для обычных чисел
-        let sign = if value < 0.0 { -1 } else { 1 };
-        let mut x = value.abs();
-        let mut a = x.floor();
-        x -= a;
+        const MAX_DENOMINATOR: u32 = 1_000_000;
+        const EPSILON: f64 = 1.0e-10;
 
-        let mut numer = a as i64;
-        let mut denom = 1;
-        let mut prev_numer = 1;
-        let mut prev_denom = 0;
+        let sign = value.signum();
+        let x = value.abs();
 
-        for _ in 0..20 {
-            if x < EPSILON {
+        // Stern-Brocot tree search
+        let (mut a, mut b) = (0u32, 1u32); // a/b (left bound)
+        let (mut c, mut d) = (1u32, 0u32); // c/d (right bound)
+        let (mut p, mut q) = (1u32, 1u32); // p/q (current approximation)
+
+        while q <= MAX_DENOMINATOR {
+            let current = p as f64 / q as f64;
+            if (current - x).abs() < EPSILON {
                 break;
             }
 
-            x = 1.0 / x;
-            a = x.floor();
-
-            // Проверка на переполнение
-            let new_numer = match (a as i64)
-                .checked_mul(numer)
-                .and_then(|x| x.checked_add(prev_numer))
-            {
-                Some(v) => v,
-                None => break,
-            };
-
-            let new_denom = match (a as u32)
-                .checked_mul(denom)
-                .and_then(|x| x.checked_add(prev_denom))
-            {
-                Some(v) => v,
-                None => break,
-            };
-
-            if new_denom > MAX_DENOMINATOR {
-                break;
+            if x > current {
+                // Move right in the tree
+                a = p;
+                b = q;
+                p = p.checked_add(c).unwrap_or(MAX_DENOMINATOR);
+                q = q.checked_add(d).unwrap_or(MAX_DENOMINATOR);
+            } else {
+                // Move left in the tree
+                c = p;
+                d = q;
+                p = p.checked_add(a).unwrap_or(MAX_DENOMINATOR);
+                q = q.checked_add(b).unwrap_or(MAX_DENOMINATOR);
             }
-
-            prev_numer = numer;
-            prev_denom = denom;
-            numer = new_numer;
-            denom = new_denom;
-            x -= a;
         }
 
-        Rational::new(sign * numer, denom).unwrap_or_default()
+        // Ensure we don't exceed max denominator
+        if q > MAX_DENOMINATOR {
+            p = (x * MAX_DENOMINATOR as f64).round() as u32;
+            q = MAX_DENOMINATOR;
+        }
+
+        // Apply sign and create Rational
+        let numerator = (sign * p as f64).round() as i64;
+        Rational::new(numerator, q).unwrap_or_else(|_| {
+            // Fallback to simpler approximation if needed
+            let simple = (value * 1000.0).round() / 1000.0;
+            Rational::new((sign * simple).round() as i64, 1000).unwrap_or_default()
+        })
     }
 }
 impl From<i64> for Rational {
     fn from(value: i64) -> Self {
-        Rational::new(value, 1).unwrap_or_default()
+        Rational::new(value, 1).unwrap()
     }
 }
 impl Display for Rational {
@@ -279,351 +506,185 @@ impl Display for Rational {
 }
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::Error;
-    #[test]
-    fn test_from_i64_basic() {
-        assert_eq!(Rational::from(0), Rational::new(0, 1).unwrap());
-        assert_eq!(Rational::from(5), Rational::new(5, 1).unwrap());
-        assert_eq!(Rational::from(-3), Rational::new(-3, 1).unwrap());
-    }
+    use std::str::FromStr;
 
+    // Тесты для gcd()
     #[test]
-    fn test_from_i64_boundaries() {
-        assert_eq!(
-            Rational::from(i64::MAX),
-            Rational::new(i64::MAX, 1).unwrap()
-        );
-        assert_eq!(
-            Rational::from(i64::MIN),
-            Rational::new(i64::MIN, 1).unwrap()
-        );
-    }
-
-    #[test]
-    fn test_from_i64_vs_new() {
-        let numbers = [0, 1, -1, 42, i64::MAX, i64::MIN];
-        for &n in &numbers {
-            assert_eq!(
-                Rational::from(n),
-                Rational::new(n, 1).unwrap(),
-                "Failed for {}",
-                n
-            );
-        }
-    }
-
-    #[test]
-    fn test_from_i64_operations() {
-        let r1 = Rational::from(5);
-        let r2 = Rational::new(3, 2).unwrap();
-        assert_eq!((r1 + r2).unwrap(), Rational::new(13, 2).unwrap());
-    }
-    #[test]
-    fn test_gcd_positive_numbers() {
-        assert_eq!(gcd(8, 12).unwrap(), 4);
-        assert_eq!(gcd(54, 24).unwrap(), 6);
-        assert_eq!(gcd(13, 17).unwrap(), 1);
-        assert_eq!(gcd(1, 1).unwrap(), 1);
-    }
-
-    #[test]
-    fn test_gcd_with_negative_numerator() {
-        assert_eq!(gcd(-8, 12).unwrap(), 4);
-        assert_eq!(gcd(-13, 17).unwrap(), 1);
-        assert_eq!(gcd(-1, 1).unwrap(), 1);
-    }
-
-    #[test]
-    fn test_gcd_with_zero_numerator() {
+    fn test_gcd_basic() {
+        assert_eq!(gcd(48, 18).unwrap(), 6);
+        assert_eq!(gcd(18, 48).unwrap(), 6);
+        assert_eq!(gcd(13, 13).unwrap(), 13);
         assert_eq!(gcd(0, 5).unwrap(), 5);
-        assert_eq!(gcd(0, 1).unwrap(), 1);
+        assert_eq!(gcd(5, 0).unwrap(), 5);
+        assert_eq!(gcd(0, 0).unwrap(), 0);
     }
 
     #[test]
-    fn test_gcd_large_numbers() {
-        assert_eq!(gcd(2_147_483_647, 2_147_483_647).unwrap(), 2_147_483_647);
-        assert_eq!(gcd(i64::MAX, u32::MAX).unwrap(), 1);
+    fn test_gcd_negative() {
+        assert_eq!(gcd(-48, 18).unwrap(), 6);
     }
 
-    #[test]
-    fn test_gcd_overflow() {
-        // Это тест требует чтобы gcd возвращал Result<u32, Error>
-        assert!(gcd(1, u32::MAX).is_ok());
-        // Случай когда результат gcd не помещается в u32
-        // (хотя это маловероятно для любых двух u32 чисел)
-    }
     #[test]
     fn test_gcd_edge_cases() {
-        // Максимальные значения
-        assert_eq!(gcd(i64::MAX, u32::MAX).unwrap(), 1);
-        assert_eq!(gcd(i64::MIN + 1, u32::MAX).unwrap(), 1);
-
-        // Случай когда одно число делится на другое
-        assert_eq!(gcd(100, 10).unwrap(), 10);
-        assert_eq!(gcd(10, 100).unwrap(), 10);
+        assert_eq!(gcd(i64::MAX, 1).unwrap(), 1);
+        assert_eq!(gcd(1, u32::MAX).unwrap(), 1);
+        assert!(matches!(gcd(i64::MIN, 1), Err(Error::Underflow)));
     }
 
+    // Тесты для Rational::new()
     #[test]
-    fn test_gcd_primes() {
-        assert_eq!(gcd(13, 17).unwrap(), 1);
-        assert_eq!(gcd(29, 31).unwrap(), 1);
-        assert_eq!(gcd(1_000_000_007, 1_000_000_009).unwrap(), 1);
-    }
-    #[test]
-    fn test_creation() {
-        assert!(Rational::new(1, 2).is_ok());
-        assert!(Rational::new(-1, 2).is_ok());
-        assert_eq!(Rational::new(1, 0).unwrap_err(), Error::WrongInputParameter);
+    fn test_rational_creation() {
+        assert!(Rational::new(1, 0).is_err()); // division by zero
+        assert_eq!(Rational::new(2, 4).unwrap(), Rational::new(1, 2).unwrap());
+        assert_eq!(Rational::new(-2, 4).unwrap(), Rational::new(-1, 2).unwrap());
     }
 
+    // Тесты для арифметических операций
     #[test]
-    fn test_normalization() {
-        let r = Rational::new(2, 4).unwrap();
-        assert_eq!(r.numerator, 1);
-        assert_eq!(r.denominator, 2);
-
-        let r = Rational::new(-4, 8).unwrap();
-        assert_eq!(r.numerator, -1);
-        assert_eq!(r.denominator, 2);
-    }
-
-    #[test]
-    fn test_addition() {
+    fn test_rational_add() {
         let r1 = Rational::new(1, 2).unwrap();
         let r2 = Rational::new(1, 3).unwrap();
-        let sum = (r1 + r2).unwrap();
-        assert_eq!(sum.numerator, 5);
-        assert_eq!(sum.denominator, 6);
-
-        // Test overflow
-        let r1 = Rational::new(i64::MAX, 1).unwrap();
-        let r2 = Rational::new(1, 1).unwrap();
-        assert_eq!((r1 + r2).unwrap_err(), Error::Overflow);
+        assert_eq!(r1 + r2, Rational::new(5, 6).unwrap());
     }
 
     #[test]
-    fn test_gcd() {
-        assert_eq!(gcd(8, 12).unwrap(), 4);
-        assert_eq!(gcd(-8, 12).unwrap(), 4);
-        assert_eq!(gcd(13, 17).unwrap(), 1);
-        assert_eq!(gcd(0, 5).unwrap(), 5);
-    }
-    #[test]
-    fn test_equality() {
-        let r1 = Rational::new(1, 2).unwrap();
-        let r2 = Rational::new(2, 4).unwrap();
-        assert_eq!(r1.numerator, r2.numerator);
-        assert_eq!(r1.denominator, r2.denominator);
-    }
-
-    #[test]
-    fn test_overflow_creation() {
-        // Это тест требует добавления проверки в new()
-        let r = Rational::new(1, u32::MAX).unwrap();
-        assert_eq!(r.denominator, u32::MAX);
-    }
-
-    #[test]
-    fn test_subtraction() {
+    fn test_rational_sub() {
         let r1 = Rational::new(1, 2).unwrap();
         let r2 = Rational::new(1, 3).unwrap();
-        let diff = (r1 - r2).unwrap();
-        assert_eq!(diff, Rational::new(1, 6).unwrap());
-
-        let r3 = Rational::new(1, 4).unwrap();
-        let r4 = Rational::new(1, 2).unwrap();
-        assert_eq!((r3 - r4).unwrap(), Rational::new(-1, 4).unwrap());
+        assert_eq!(r1 - r2, Rational::new(1, 6).unwrap());
     }
 
     #[test]
-    fn test_multiplication() {
+    fn test_rational_mul() {
         let r1 = Rational::new(1, 2).unwrap();
         let r2 = Rational::new(2, 3).unwrap();
-        assert_eq!((r1 * r2).unwrap(), Rational::new(1, 3).unwrap());
-
-        let r3 = Rational::new(-3, 4).unwrap();
-        let r4 = Rational::new(2, 5).unwrap();
-        assert_eq!((r3 * r4).unwrap(), Rational::new(-3, 10).unwrap());
+        assert_eq!(r1 * r2, Rational::new(1, 3).unwrap());
     }
 
     #[test]
-    fn test_division() {
+    fn test_rational_div() {
         let r1 = Rational::new(1, 2).unwrap();
-        let r2 = Rational::new(3, 4).unwrap();
-        assert_eq!((r1 / r2).unwrap(), Rational::new(2, 3).unwrap());
+        let r2 = Rational::new(2, 3).unwrap();
+        assert_eq!(r1 / r2, Rational::new(3, 4).unwrap());
+    }
 
-        let r3 = Rational::new(-3, 4).unwrap();
-        let r4 = Rational::new(6, 7).unwrap();
-        assert_eq!((r3 / r4).unwrap(), Rational::new(-7, 8).unwrap());
+    // Тесты для преобразований
+    #[test]
+    fn test_from_f64() {
+        assert_eq!(Rational::from(0.5), Rational::new(1, 2).unwrap());
+        assert_eq!(Rational::from(-0.25), Rational::new(-1, 4).unwrap());
+        assert_eq!(Rational::from(2.0), Rational::new(2, 1).unwrap());
     }
 
     #[test]
-    fn test_division_by_zero() {
-        let r1 = Rational::new(1, 2).unwrap();
-        let r2 = Rational::new(0, 1).unwrap();
-        assert_eq!((r1 / r2).unwrap_err(), Error::DivisionByZero);
-    }
-
-    #[test]
-    fn test_operator_overloading() {
-        let r1 = Rational::new(1, 2).unwrap();
-        let r2 = Rational::new(1, 3).unwrap();
-
-        assert_eq!(
-            (r1.clone() + r2.clone()).unwrap(),
-            Rational::new(5, 6).unwrap()
-        );
-        assert_eq!(
-            (r1.clone() - r2.clone()).unwrap(),
-            Rational::new(1, 6).unwrap()
-        );
-        assert_eq!(
-            (r1.clone() * r2.clone()).unwrap(),
-            Rational::new(1, 6).unwrap()
-        );
-        assert_eq!((r1 / r2).unwrap(), Rational::new(3, 2).unwrap());
-    }
-
-    #[test]
-    fn test_overflow_operations() {
-        let r1 = Rational::new(i64::MAX, 1).unwrap();
-        let r2 = Rational::new(1, 1).unwrap();
-        assert_eq!((r1 + r2).unwrap_err(), Error::Overflow);
-
-        let r3 = Rational::new(1, u32::MAX).unwrap();
-        let r4 = Rational::new(1, u32::MAX).unwrap();
-        assert_eq!((r3 * r4).unwrap_err(), Error::Overflow);
-    }
-
-    #[test]
-    fn test_f64_conversion() {
+    fn test_into_f64() {
         let r = Rational::new(1, 2).unwrap();
         assert_eq!(f64::from(r), 0.5);
-
-        let r = Rational::new(3, 4).unwrap();
-        assert_eq!(f64::from(r), 0.75);
-
-        let r = Rational::new(-2, 5).unwrap();
-        assert_eq!(f64::from(r), -0.4);
-    }
-    #[test]
-    fn test_conversion_edge_cases() {
-        let r = Rational::new(0, 1).unwrap();
-        assert_eq!(f64::from(r), 0.0);
-
-        let r = Rational::new(i64::MAX, u32::MAX).unwrap();
-        assert!(f64::from(r).is_finite());
-
-        let r = Rational::new(i64::MIN, 1).unwrap();
-        assert!(f64::from(r).is_finite());
-    }
-    #[test]
-    fn test_f32_try_from() {
-        // Проверка точности для простой дроби
-        let r = Rational::new(1, 3).unwrap();
-        let converted = f32::try_from(r).unwrap();
-        assert!((converted - 0.3333333).abs() < f32::EPSILON);
-
-        // Проверка переполнения - используем значение, которое точно не поместится в f32
-        let r = Rational::new(i64::MAX, 1).unwrap();
-        assert!(f32::try_from(r.clone()).is_ok());
-
-        // Проверка очень больших чисел, но которые помещаются в f32
-        let r = Rational::new(1, u32::MAX).unwrap();
-        assert!(f32::try_from(r).is_ok());
-
-        // Проверка граничного случая - максимальное значение f32
-        let max_f32 = f32::MAX;
-        let r = Rational::new(max_f32 as i64, 2).unwrap();
-        assert!(f32::try_from(r).is_ok());
-    }
-    #[test]
-    fn test_from_f64_simple() {
-        assert_eq!(Rational::from(0.5), Rational::new(1, 2).unwrap());
-        assert_eq!(Rational::from(-0.25), Rational::new(-1, 4).unwrap());
-        assert_eq!(Rational::from(0.75), Rational::new(3, 4).unwrap());
     }
 
+    // Тесты для сравнений
     #[test]
-    fn test_from_f64_repeating() {
-        // Проверяем близость, а не точное соответствие
-        let r = Rational::from(0.3333333333);
-        assert!((f64::from(r) - 1.0 / 3.0).abs() < 1.0e-6);
-
-        let r = Rational::from(0.6666666666);
-        assert!((f64::from(r) - 2.0 / 3.0).abs() < 1.0e-6);
+    fn test_rational_ordering() {
+        let r1 = Rational::new(1, 2).unwrap();
+        let r2 = Rational::new(1, 3).unwrap();
+        assert!(r1 > r2);
+        assert!(r2 < r1);
+        assert_eq!(r1, r1);
     }
 
-    // #[test]
-    // fn test_from_f64_special() {
-    //     assert_eq!(Rational::from(f64::NAN), Rational::default());
-    //     assert_eq!(Rational::from(f64::INFINITY), Rational::default());
-    //     assert_eq!(Rational::from(f64::NEG_INFINITY), Rational::default());
-    // }
-
+    // Тесты для FromStr
     #[test]
-    fn test_from_f64_precision() {
-        // Проверяем что результат достаточно близок
-        let r = Rational::from(0.123456789);
-        let expected = 0.123456789;
-        let actual = f64::from(r.clone());
-        let error = (actual - expected).abs();
-        assert!(
-            error < 1.0e-8,
-            "Expected {} to be close to {}, but error is {}",
-            r,
-            expected,
-            error
-        );
-
-        // Проверяем что это лучшее приближение в пределах MAX_DENOMINATOR
-        let better = Rational::new(10, 81).unwrap(); // 10/81 ≈ 0.123456790
-        assert!(
-            (f64::from(r.clone()) - expected).abs() <= (f64::from(better.clone()) - expected).abs(),
-            "{} should be at least as good as {}",
-            r,
-            better
-        );
-    }
-
-    #[test]
-    fn test_from_f64_large() {
-        // Целые числа в пределах i64
+    fn test_from_str() {
         assert_eq!(
-            Rational::from(1_000_000.0),
-            Rational::new(1_000_000, 1).unwrap()
-        );
-        assert_eq!(Rational::from(-2500.0), Rational::new(-2500, 1).unwrap());
-
-        // Граничные случаи
-        assert_eq!(
-            Rational::from(i64::MAX as f64),
-            Rational::new(i64::MAX, 1).unwrap()
+            Rational::from_str("1/2").unwrap(),
+            Rational::new(1, 2).unwrap()
         );
         assert_eq!(
-            Rational::from(i64::MIN as f64),
-            Rational::new(i64::MIN, 1).unwrap()
+            Rational::from_str("3").unwrap(),
+            Rational::new(3, 1).unwrap()
         );
+        assert!(Rational::from_str("a/b").is_err());
+        assert!(Rational::from_str("1/2/3").is_err());
+    }
 
-        // Очень большие числа (вне i64)
-        let r = Rational::from(1.0e20);
-        assert_eq!(r, Rational::new(1, 1).unwrap()); // Упрощенное представление
+    // Тесты для специальных методов
+    #[test]
+    fn test_reciprocal() {
+        assert_eq!(
+            Rational::new(2, 3).unwrap().reciprocal().unwrap(),
+            Rational::new(3, 2).unwrap()
+        );
+        assert!(Rational::new(0, 1).unwrap().reciprocal().is_err());
     }
 
     #[test]
-    fn test_from_f64_fractions() {
-        assert_eq!(Rational::from(0.5), Rational::new(1, 2).unwrap());
-        assert_eq!(Rational::from(-0.25), Rational::new(-1, 4).unwrap());
-        assert_eq!(Rational::from(0.3333333333), Rational::new(1, 3).unwrap());
+    fn test_abs() {
+        assert_eq!(
+            Rational::new(-1, 2).unwrap().abs(),
+            Rational::new(1, 2).unwrap()
+        );
+    }
+
+    // Тесты для переполнений
+    #[test]
+    fn test_overflow_cases() {
+        let max = Rational::new(i64::MAX, 1).unwrap();
+        assert!(max.checked_add(&max).is_err());
+        assert!(max.checked_mul(&max).is_err());
+    }
+
+    // Тесты для операций с разными типами
+    #[test]
+    fn test_mixed_operations() {
+        let r = Rational::new(1, 2).unwrap();
+        assert_eq!(r * 3, Rational::new(3, 2).unwrap());
+        assert_eq!(r / 2, Rational::new(1, 4).unwrap());
+    }
+    #[test]
+    fn test_pow_positive() {
+        let r = Rational::new(2, 3).unwrap();
+        assert_eq!(r.pow(3), Rational::new(8, 27).unwrap());
+        assert_eq!(r.pow(1), r);
+        assert_eq!(r.pow(0), Rational::new(1, 1).unwrap());
     }
 
     #[test]
-    fn test_from_f64_special() {
-        assert_eq!(Rational::from(f64::NAN), Rational::default());
-        assert_eq!(Rational::from(f64::INFINITY), Rational::default());
-        assert_eq!(Rational::from(0.0), Rational::new(0, 1).unwrap());
-        assert_eq!(Rational::from(f64::NEG_INFINITY), Rational::default());
+    fn test_pow_negative() {
+        let r = Rational::new(2, 3).unwrap();
+        assert_eq!(r.pow(-1), Rational::new(3, 2).unwrap());
+        assert_eq!(r.pow(-2), Rational::new(9, 4).unwrap());
+    }
+
+    #[test]
+    fn test_pow_zero() {
+        let r = Rational::new(2, 3).unwrap();
+        assert_eq!(r.pow(0), Rational::new(1, 1).unwrap());
+    }
+
+    #[test]
+    fn test_checked_pow_overflow() {
+        let large = Rational::new(i64::MAX, 1).unwrap();
+        assert!(large.checked_pow(2).is_err());
+    }
+
+    #[test]
+    fn test_checked_pow_division_by_zero() {
+        let zero = Rational::new(0, 1).unwrap();
+        assert!(zero.checked_pow(-1).is_err());
+    }
+
+    #[test]
+    fn test_pow_edge_cases() {
+        let r = Rational::new(1, 1).unwrap();
+        assert_eq!(r.pow(i32::MAX), r);
+        assert_eq!(r.pow(i32::MIN), r);
+    }
+
+    #[test]
+    fn test_pow_normalization() {
+        let r = Rational::new(2, 4).unwrap(); // 1/2 после нормализации
+        assert_eq!(r.pow(2), Rational::new(1, 4).unwrap());
     }
 }

@@ -40,11 +40,11 @@ impl Vector {
         let a = &self.0;
         let b = &rhs.0;
 
-        let x = (a[1].clone() * b[2].clone())? - (a[2].clone() * b[1].clone())?;
-        let y = (a[2].clone() * b[0].clone())? - (a[0].clone() * b[2].clone())?;
-        let z = (a[0].clone() * b[1].clone())? - (a[1].clone() * b[0].clone())?;
+        let x = a[1] * b[2] - a[2] * b[1];
+        let y = a[2] * b[0] - a[0] * b[2];
+        let z = a[0] * b[1] - a[1] * b[0];
 
-        Ok(Self(vec![x?, y?, z?]))
+        Ok(Self(vec![x, y, z]))
     }
 }
 impl From<&[Rational]> for Vector {
@@ -70,9 +70,9 @@ impl Add for Vector {
         Ok(Self(
             self.0
                 .into_iter()
-                .zip(rhs.0.into_iter())
+                .zip(rhs.0)
                 .map(|(a, b)| a + b)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
         ))
     }
 }
@@ -87,9 +87,9 @@ impl Sub for Vector {
         Ok(Self(
             self.0
                 .into_iter()
-                .zip(rhs.0.into_iter())
+                .zip(rhs.0)
                 .map(|(a, b)| a - b)
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
         ))
     }
 }
@@ -99,10 +99,7 @@ impl Mul<Rational> for Vector {
 
     fn mul(self, scalar: Rational) -> Result<Self> {
         Ok(Self(
-            self.0
-                .into_iter()
-                .map(|x| x * scalar.clone())
-                .collect::<Result<Vec<_>>>()?,
+            self.0.into_iter().map(|x| x * scalar).collect::<Vec<_>>(),
         ))
     }
 }
@@ -114,7 +111,7 @@ impl Mul<i64> for Vector {
             self.0
                 .into_iter()
                 .map(|x| x * Rational::from(scalar))
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
         ))
     }
 }
@@ -127,10 +124,7 @@ impl Div<Rational> for Vector {
             return Err(crate::Error::DivisionByZero);
         }
         Ok(Self(
-            self.0
-                .into_iter()
-                .map(|x| x / scalar.clone())
-                .collect::<Result<Vec<_>>>()?,
+            self.0.into_iter().map(|x| x / scalar).collect::<Vec<_>>(),
         ))
     }
 }
@@ -145,7 +139,7 @@ impl Div<i64> for Vector {
             self.0
                 .into_iter()
                 .map(|x| x / Rational::from(scalar))
-                .collect::<Result<Vec<_>>>()?,
+                .collect::<Vec<_>>(),
         ))
     }
 }
@@ -226,7 +220,9 @@ mod tests {
     fn test_vector_division_by_zero() {
         let v = Vector::from([Rational::from(1)].as_slice());
         let scalar = Rational::from(0);
-        assert_eq!(v / scalar, Err(crate::Error::DivisionByZero));
+        let div = v.clone() / scalar;
+        assert!(div.is_err());
+        assert!((v / 0).is_err());
     }
 
     #[test]

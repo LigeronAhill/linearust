@@ -8,6 +8,7 @@ pub enum Error {
     DivisionByZero,
     Infinity,
     NaN,
+    ParseError,
     TryFromIntError(String),
 }
 
