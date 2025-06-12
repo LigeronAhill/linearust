@@ -58,6 +58,15 @@ impl<const N: usize> Vector<N> {
             coordinates: self.coordinates.map(|x| x * scalar),
         }
     }
+    /// Возвращает итератор по ссылкам на элементы
+    pub fn iter(&self) -> impl Iterator<Item = &Rational> {
+        self.coordinates.iter()
+    }
+
+    /// Возвращает изменяемый итератор по элементам
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Rational> {
+        self.coordinates.iter_mut()
+    }
 }
 use std::ops::Add;
 
@@ -77,6 +86,8 @@ impl<const N: usize> Add for Vector<N> {
         Self { coordinates }
     }
 }
+use std::ops::Index;
+use std::ops::IndexMut;
 use std::ops::Sub;
 
 impl<const N: usize> Sub for Vector<N> {
@@ -167,6 +178,44 @@ impl<const N: usize> From<[Rational; N]> for Vector<N> {
         Self { coordinates: arr }
     }
 }
+
+impl<const N: usize> Index<usize> for Vector<N> {
+    type Output = Rational;
+
+    fn index(&self, index: usize) -> &Rational {
+        &self.coordinates[index]
+    }
+}
+
+impl<const N: usize> IndexMut<usize> for Vector<N> {
+    fn index_mut(&mut self, index: usize) -> &mut Rational {
+        &mut self.coordinates[index]
+    }
+}
+impl<'a, const N: usize> IntoIterator for &'a Vector<N> {
+    type Item = &'a Rational;
+    type IntoIter = std::slice::Iter<'a, Rational>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.coordinates.iter()
+    }
+}
+impl<'a, const N: usize> IntoIterator for &'a mut Vector<N> {
+    type Item = &'a mut Rational;
+    type IntoIter = std::slice::IterMut<'a, Rational>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.coordinates.iter_mut()
+    }
+}
+impl<const N: usize> IntoIterator for Vector<N> {
+    type Item = Rational;
+    type IntoIter = std::array::IntoIter<Rational, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.coordinates.into_iter()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,8 +223,8 @@ mod tests {
     #[test]
     fn test_vector_new() {
         let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(3, 4).unwrap()]);
-        assert_eq!(v.coordinates[0], Rational::new(1, 2).unwrap());
-        assert_eq!(v.coordinates[1], Rational::new(3, 4).unwrap());
+        assert_eq!(v[0], Rational::new(1, 2).unwrap());
+        assert_eq!(v[1], Rational::new(3, 4).unwrap());
     }
 
     #[test]
@@ -183,8 +232,8 @@ mod tests {
         let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
         let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(2, 3).unwrap()]);
         let sum = v1 + v2;
-        assert_eq!(sum.coordinates[0], Rational::new(3, 4).unwrap());
-        assert_eq!(sum.coordinates[1], Rational::new(1, 1).unwrap());
+        assert_eq!(sum[0], Rational::new(3, 4).unwrap());
+        assert_eq!(sum[1], Rational::new(1, 1).unwrap());
     }
 
     #[test]
@@ -205,8 +254,8 @@ mod tests {
     fn test_vector_scale() {
         let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
         let scaled = v.scale(Rational::new(2, 1).unwrap());
-        assert_eq!(scaled.coordinates[0], Rational::new(1, 1).unwrap());
-        assert_eq!(scaled.coordinates[1], Rational::new(2, 3).unwrap());
+        assert_eq!(scaled[0], Rational::new(1, 1).unwrap());
+        assert_eq!(scaled[1], Rational::new(2, 3).unwrap());
     }
 
     #[test]
@@ -214,8 +263,8 @@ mod tests {
         let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
         let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(2, 3).unwrap()]);
         let sum = v1 + v2;
-        assert_eq!(sum.coordinates[0], Rational::new(3, 4).unwrap());
-        assert_eq!(sum.coordinates[1], Rational::new(1, 1).unwrap());
+        assert_eq!(sum[0], Rational::new(3, 4).unwrap());
+        assert_eq!(sum[1], Rational::new(1, 1).unwrap());
     }
 
     #[test]
@@ -223,24 +272,24 @@ mod tests {
         let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 1).unwrap()]);
         let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(1, 2).unwrap()]);
         let diff = v1 - v2;
-        assert_eq!(diff.coordinates[0], Rational::new(1, 4).unwrap());
-        assert_eq!(diff.coordinates[1], Rational::new(1, 2).unwrap());
+        assert_eq!(diff[0], Rational::new(1, 4).unwrap());
+        assert_eq!(diff[1], Rational::new(1, 2).unwrap());
     }
 
     #[test]
     fn test_mul_trait() {
         let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
         let scaled = v * Rational::new(2, 1).unwrap();
-        assert_eq!(scaled.coordinates[0], Rational::new(1, 1).unwrap());
-        assert_eq!(scaled.coordinates[1], Rational::new(2, 3).unwrap());
+        assert_eq!(scaled[0], Rational::new(1, 1).unwrap());
+        assert_eq!(scaled[1], Rational::new(2, 3).unwrap());
     }
 
     #[test]
     fn test_div_trait() {
         let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
         let divided = v / Rational::new(2, 1).unwrap();
-        assert_eq!(divided.coordinates[0], Rational::new(1, 4).unwrap());
-        assert_eq!(divided.coordinates[1], Rational::new(1, 6).unwrap());
+        assert_eq!(divided[0], Rational::new(1, 4).unwrap());
+        assert_eq!(divided[1], Rational::new(1, 6).unwrap());
     }
 
     #[test]
@@ -254,8 +303,8 @@ mod tests {
     fn test_neg_trait() {
         let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(-1, 3).unwrap()]);
         let neg = -v;
-        assert_eq!(neg.coordinates[0], Rational::new(-1, 2).unwrap());
-        assert_eq!(neg.coordinates[1], Rational::new(1, 3).unwrap());
+        assert_eq!(neg[0], Rational::new(-1, 2).unwrap());
+        assert_eq!(neg[1], Rational::new(1, 3).unwrap());
     }
     #[test]
     fn test_display() {
@@ -266,7 +315,56 @@ mod tests {
     #[test]
     fn test_from_array() {
         let v: Vector<2> = [1, 2].into();
-        assert_eq!(v.coordinates[0], Rational::new(1, 1).unwrap());
-        assert_eq!(v.coordinates[1], Rational::new(2, 1).unwrap());
+        assert_eq!(v[0], Rational::new(1, 1).unwrap());
+        assert_eq!(v[1], Rational::new(2, 1).unwrap());
+    }
+    #[test]
+    fn test_iteration() {
+        let v = Vector::new([
+            Rational::new(1, 2).unwrap(),
+            Rational::new(3, 4).unwrap(),
+            Rational::new(5, 6).unwrap(),
+        ]);
+
+        // Итерация по ссылкам
+        let mut iter = v.iter();
+        assert_eq!(iter.next(), Some(&Rational::new(1, 2).unwrap()));
+        assert_eq!(iter.next(), Some(&Rational::new(3, 4).unwrap()));
+        assert_eq!(iter.next(), Some(&Rational::new(5, 6).unwrap()));
+        assert_eq!(iter.next(), None);
+
+        let mut u = Vector::new([
+            Rational::new(1, 2).unwrap(),
+            Rational::new(3, 4).unwrap(),
+            Rational::new(5, 6).unwrap(),
+        ]);
+        // Изменяемая итерация
+        for x in u.iter_mut() {
+            *x = *x * Rational::from(2);
+        }
+        assert_eq!(u[0], Rational::new(1, 1).unwrap());
+
+        // Потребляющая итерация
+        let sum: Rational = u.into_iter().sum();
+        assert_eq!(sum, Rational::new(25, 6).unwrap());
+    }
+
+    #[test]
+    fn test_for_loop() {
+        let v = Vector::new([
+            Rational::new(1, 2).unwrap(),
+            Rational::new(1, 3).unwrap(),
+            Rational::new(1, 4).unwrap(),
+        ]);
+
+        let mut sum = Rational::default();
+        for x in v {
+            sum = sum + x;
+        }
+        assert_eq!(sum, Rational::new(13, 12).unwrap());
+
+        // Использование в итераторных адаптерах
+        let squares_sum: Rational = v.iter().map(|x| *x * *x).sum();
+        assert_eq!(squares_sum, Rational::new(61, 144).unwrap());
     }
 }
