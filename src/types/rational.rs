@@ -2,6 +2,7 @@ use crate::Result;
 use std::{
     cmp::Ordering,
     fmt::Display,
+    iter::Sum,
     ops::{Add, Div, Mul, Neg, Sub},
 };
 /// Рациональное число, представленное дробью с числителем (i64) и знаменателем (u32).
@@ -307,10 +308,29 @@ impl Neg for Rational {
         }
     }
 }
+impl<'a> Neg for &'a Rational {
+    type Output = Rational;
+    fn neg(self) -> Rational {
+        Rational {
+            numerator: -self.numerator,
+            denominator: self.denominator,
+        }
+    }
+}
 impl Add for Rational {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
+        let numerator = self.numerator * (other.denominator as i64)
+            + other.numerator * (self.denominator as i64);
+        let denominator = self.denominator * other.denominator;
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl<'a> Add for &'a Rational {
+    type Output = Rational;
+
+    fn add(self, other: Self) -> Rational {
         let numerator = self.numerator * (other.denominator as i64)
             + other.numerator * (self.denominator as i64);
         let denominator = self.denominator * other.denominator;
@@ -328,11 +348,33 @@ impl Sub for Rational {
         Rational::new(numerator, denominator).unwrap()
     }
 }
+impl<'a> Sub for &'a Rational {
+    type Output = Rational;
+
+    fn sub(self, other: Self) -> Rational {
+        let numerator = self.numerator * (other.denominator as i64)
+            - other.numerator * (self.denominator as i64);
+
+        let denominator = self.denominator * other.denominator;
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
 
 impl Mul<Rational> for Rational {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
+        let numerator = self.numerator * other.numerator;
+
+        let denominator = self.denominator * other.denominator;
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl<'a> Mul<&'a Rational> for &'a Rational {
+    type Output = Rational;
+
+    fn mul(self, other: Self) -> Rational {
         let numerator = self.numerator * other.numerator;
 
         let denominator = self.denominator * other.denominator;
@@ -364,6 +406,24 @@ impl Div<Rational> for Rational {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
+        let numerator = self.numerator * (other.denominator as i64);
+
+        let denominator = self.denominator * (other.numerator.unsigned_abs() as u32);
+
+        // Сохраняем знак в числителе
+        let numerator = if other.numerator < 0 {
+            -numerator
+        } else {
+            numerator
+        };
+
+        Rational::new(numerator, denominator).unwrap()
+    }
+}
+impl<'a> Div<&'a Rational> for &'a Rational {
+    type Output = Rational;
+
+    fn div(self, other: Self) -> Rational {
         let numerator = self.numerator * (other.denominator as i64);
 
         let denominator = self.denominator * (other.numerator.unsigned_abs() as u32);
@@ -502,6 +562,19 @@ impl From<i64> for Rational {
 impl Display for Rational {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.numerator, self.denominator)
+    }
+}
+// Реализация Sum для поддержки .sum() в итераторах
+impl Sum for Rational {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Self::default(), |acc, x| acc + x)
+    }
+}
+
+// Для суммирования ссылок (&Rational)
+impl<'a> Sum<&'a Rational> for Rational {
+    fn sum<I: Iterator<Item = &'a Rational>>(iter: I) -> Self {
+        iter.fold(Self::default(), |acc, x| acc + *x)
     }
 }
 #[cfg(test)]

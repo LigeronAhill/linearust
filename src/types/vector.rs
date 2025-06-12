@@ -1,266 +1,272 @@
-use crate::Result;
-use std::ops::{Add, Div, Mul, Sub};
-
 use super::Rational;
+/// Вектор фиксированной размерности с рациональными координатами
+///
+/// # Примеры
+/// ```
+/// use linearust::types::{Rational, Vector};
+///
+/// let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(3, 4).unwrap()]);
+/// let v2 = Vector::new([Rational::new(2, 3).unwrap(), Rational::new(1, 2).unwrap()]);
+///
+/// let sum = v1 + v2;
+/// assert_eq!(sum, Vector::new([Rational::new(7, 6).unwrap(), Rational::new(5, 4).unwrap()]));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Vector<const N: usize> {
+    coordinates: [Rational; N],
+}
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Vector(Vec<Rational>);
-
-impl Vector {
-    /// Создает новый вектор заданного размера, заполненный нулями
-    pub fn new(size: u32) -> Self {
-        Self(vec![Rational::default(); size as usize])
+impl<const N: usize> Vector<N> {
+    /// Создает новый вектор с заданными координатами
+    pub fn new(coordinates: [Rational; N]) -> Self {
+        Self { coordinates }
     }
-
-    /// Возвращает размер вектора
-    pub fn size(&self) -> u32 {
-        self.0.len() as u32
-    }
-
-    /// Получает элемент по индексу
-    pub fn get(&self, index: usize) -> Option<&Rational> {
-        self.0.get(index)
-    }
-
-    /// Устанавливает элемент по индексу
-    pub fn set(&mut self, index: usize, value: Rational) -> Result<()> {
-        if index >= self.0.len() {
-            return Err(crate::Error::WrongInputParameter);
+    /// Поэлементное сложение векторов
+    pub fn add(&self, other: &Self) -> Self {
+        let mut result = [Rational::default(); N];
+        for (i, (a, b)) in self
+            .coordinates
+            .iter()
+            .zip(other.coordinates.iter())
+            .enumerate()
+        {
+            result[i] = a + b;
         }
-        self.0[index] = value;
-        Ok(())
-    }
-    /// Вычисляет векторное произведение для 3-мерных векторов
-    /// Возвращает ошибку если векторы не 3-мерные
-    pub fn cross(&self, rhs: &Self) -> Result<Self> {
-        if self.size() != 3 || rhs.size() != 3 {
-            return Err(crate::Error::WrongInputParameter);
+        Self {
+            coordinates: result,
         }
-
-        let a = &self.0;
-        let b = &rhs.0;
-
-        let x = a[1] * b[2] - a[2] * b[1];
-        let y = a[2] * b[0] - a[0] * b[2];
-        let z = a[0] * b[1] - a[1] * b[0];
-
-        Ok(Self(vec![x, y, z]))
     }
-}
-impl From<&[Rational]> for Vector {
-    fn from(value: &[Rational]) -> Self {
-        Self(value.to_vec())
+    /// Скалярное произведение векторов
+    pub fn dot(&self, other: &Self) -> Rational {
+        self.coordinates
+            .iter()
+            .zip(other.coordinates.iter())
+            .map(|(a, b)| a * b)
+            .sum::<Rational>()
     }
-}
-impl From<&[i64]> for Vector {
-    fn from(value: &[i64]) -> Self {
-        Self(value.iter().map(|v| Rational::from(*v)).collect())
-    }
-}
-
-// Реализация операций
-
-impl Add for Vector {
-    type Output = Result<Self>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        if self.size() != rhs.size() {
-            return Err(crate::Error::WrongInputParameter);
+    /// Евклидова норма (длина) вектора
+    pub fn norm(&self) -> f64 {
+        let dot = self.dot(self);
+        if dot.numerator() == 0 {
+            return 0.0;
         }
-        Ok(Self(
-            self.0
-                .into_iter()
-                .zip(rhs.0)
-                .map(|(a, b)| a + b)
-                .collect::<Vec<_>>(),
-        ))
+        (dot.numerator() as f64 / dot.denominator() as f64).sqrt()
     }
-}
-
-impl Sub for Vector {
-    type Output = Result<Self>;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        if self.size() != rhs.size() {
-            return Err(crate::Error::WrongInputParameter);
+    /// Умножение вектора на скаляр
+    pub fn scale(&self, scalar: Rational) -> Self {
+        Self {
+            coordinates: self.coordinates.map(|x| x * scalar),
         }
-        Ok(Self(
-            self.0
-                .into_iter()
-                .zip(rhs.0)
-                .map(|(a, b)| a - b)
-                .collect::<Vec<_>>(),
-        ))
     }
 }
+use std::ops::Add;
 
-impl Mul<Rational> for Vector {
-    type Output = Result<Self>;
+impl<const N: usize> Add for Vector<N> {
+    type Output = Self;
 
-    fn mul(self, scalar: Rational) -> Result<Self> {
-        Ok(Self(
-            self.0.into_iter().map(|x| x * scalar).collect::<Vec<_>>(),
-        ))
-    }
-}
-impl Mul<i64> for Vector {
-    type Output = Result<Self>;
-
-    fn mul(self, scalar: i64) -> Result<Self> {
-        Ok(Self(
-            self.0
-                .into_iter()
-                .map(|x| x * Rational::from(scalar))
-                .collect::<Vec<_>>(),
-        ))
-    }
-}
-
-impl Div<Rational> for Vector {
-    type Output = Result<Self>;
-
-    fn div(self, scalar: Rational) -> Result<Self> {
-        if scalar == Rational::default() {
-            return Err(crate::Error::DivisionByZero);
+    fn add(self, other: Self) -> Self {
+        let mut coordinates = [Rational::default(); N];
+        for (i, (a, b)) in self
+            .coordinates
+            .iter()
+            .zip(other.coordinates.iter())
+            .enumerate()
+        {
+            coordinates[i] = a + b;
         }
-        Ok(Self(
-            self.0.into_iter().map(|x| x / scalar).collect::<Vec<_>>(),
-        ))
+        Self { coordinates }
     }
 }
-impl Div<i64> for Vector {
-    type Output = Result<Self>;
+use std::ops::Sub;
 
-    fn div(self, scalar: i64) -> Result<Self> {
-        if scalar == 0 {
-            return Err(crate::Error::DivisionByZero);
+impl<const N: usize> Sub for Vector<N> {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        let mut coordinates = [Rational::default(); N];
+        for (i, (a, b)) in self
+            .coordinates
+            .iter()
+            .zip(other.coordinates.iter())
+            .enumerate()
+        {
+            coordinates[i] = a - b;
         }
-        Ok(Self(
-            self.0
-                .into_iter()
-                .map(|x| x / Rational::from(scalar))
-                .collect::<Vec<_>>(),
-        ))
+        Self { coordinates }
     }
 }
+use std::ops::Mul;
 
-// Тесты
+impl<const N: usize> Mul<Rational> for Vector<N> {
+    type Output = Self;
 
+    fn mul(self, scalar: Rational) -> Self {
+        self.scale(scalar)
+    }
+}
+impl<const N: usize> Mul<Vector<N>> for Vector<N> {
+    type Output = Rational;
+
+    fn mul(self, other: Vector<N>) -> Rational {
+        self.dot(&other)
+    }
+}
+use std::ops::Div;
+
+impl<const N: usize> Div<Rational> for Vector<N> {
+    type Output = Self;
+
+    fn div(self, scalar: Rational) -> Self {
+        assert_ne!(scalar.numerator(), 0, "Division by zero");
+        Self {
+            coordinates: self.coordinates.map(|x| x / scalar),
+        }
+    }
+}
+use std::ops::Neg;
+
+impl<const N: usize> Neg for Vector<N> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self {
+            coordinates: self.coordinates.map(|x| -x),
+        }
+    }
+}
+use std::fmt;
+
+impl<const N: usize> fmt::Display for Vector<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, coord) in self.coordinates.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", coord)?;
+        }
+        write!(f, "]")
+    }
+}
+impl<const N: usize> From<[i64; N]> for Vector<N> {
+    fn from(arr: [i64; N]) -> Self {
+        Self {
+            coordinates: arr.map(Rational::from),
+        }
+    }
+}
+impl<const N: usize> From<[f64; N]> for Vector<N> {
+    fn from(arr: [f64; N]) -> Self {
+        Self {
+            coordinates: arr.map(Rational::from),
+        }
+    }
+}
+impl<const N: usize> From<[Rational; N]> for Vector<N> {
+    fn from(arr: [Rational; N]) -> Self {
+        Self { coordinates: arr }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_vector_creation() {
-        let v = Vector::new(3);
-        assert_eq!(v.size(), 3);
-        assert_eq!(v.get(0), Some(&Rational::default()));
+    fn test_vector_new() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(3, 4).unwrap()]);
+        assert_eq!(v.coordinates[0], Rational::new(1, 2).unwrap());
+        assert_eq!(v.coordinates[1], Rational::new(3, 4).unwrap());
     }
 
     #[test]
-    fn test_vector_addition() {
-        // let v1 = Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice());
-        let v1 = Vector::from([1, 2, 3].as_slice());
-        let v2 = Vector::from([Rational::from(4), Rational::from(5), Rational::from(6)].as_slice());
-        let sum = (v1 + v2).unwrap();
-        assert_eq!(
-            sum,
-            Vector::from([Rational::from(5), Rational::from(7), Rational::from(9)].as_slice())
-        );
+    fn test_vector_add() {
+        let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(2, 3).unwrap()]);
+        let sum = v1 + v2;
+        assert_eq!(sum.coordinates[0], Rational::new(3, 4).unwrap());
+        assert_eq!(sum.coordinates[1], Rational::new(1, 1).unwrap());
     }
 
     #[test]
-    fn test_vector_subtraction() {
-        let v1 = Vector::from([Rational::from(5), Rational::from(7), Rational::from(9)].as_slice());
-        let v2 = Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice());
-        let diff = (v1 - v2).unwrap();
-        assert_eq!(
-            diff,
-            Vector::from([Rational::from(4), Rational::from(5), Rational::from(6)].as_slice())
-        );
+    fn test_vector_dot() {
+        let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let v2 = Vector::new([Rational::new(2, 1).unwrap(), Rational::new(3, 1).unwrap()]);
+        let dot = v1 * v2;
+        assert_eq!(dot, Rational::new(2, 1).unwrap());
     }
 
     #[test]
-    fn test_vector_scalar_multiplication() {
-        let v = Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice());
-        let scalar = Rational::from(2);
-        let product = v * scalar;
-        assert_eq!(
-            product.unwrap(),
-            Vector::from([Rational::from(2), Rational::from(4), Rational::from(6)].as_slice())
-        );
-        let v = Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice());
-        let scalar = 2;
-        let product = v * scalar;
-        assert_eq!(
-            product.unwrap(),
-            Vector::from([Rational::from(2), Rational::from(4), Rational::from(6)].as_slice())
-        );
+    fn test_vector_norm() {
+        let v = Vector::new([Rational::new(3, 1).unwrap(), Rational::new(4, 1).unwrap()]);
+        assert!((v.norm() - 5.0).abs() < f64::EPSILON);
     }
 
     #[test]
-    fn test_vector_scalar_division() {
-        let v = Vector::from([Rational::from(2), Rational::from(4), Rational::from(6)].as_slice());
-        let scalar = Rational::from(2);
-        let quotient = (v / scalar).unwrap();
-        assert_eq!(
-            quotient,
-            Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice())
-        );
-        let v = Vector::from([Rational::from(2), Rational::from(4), Rational::from(6)].as_slice());
-        let scalar = 2;
-        let quotient = (v / scalar).unwrap();
-        assert_eq!(
-            quotient,
-            Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice())
-        );
+    fn test_vector_scale() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let scaled = v.scale(Rational::new(2, 1).unwrap());
+        assert_eq!(scaled.coordinates[0], Rational::new(1, 1).unwrap());
+        assert_eq!(scaled.coordinates[1], Rational::new(2, 3).unwrap());
     }
 
     #[test]
-    fn test_vector_division_by_zero() {
-        let v = Vector::from([Rational::from(1)].as_slice());
-        let scalar = Rational::from(0);
-        let div = v.clone() / scalar;
-        assert!(div.is_err());
-        assert!((v / 0).is_err());
+    fn test_add_trait() {
+        let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(2, 3).unwrap()]);
+        let sum = v1 + v2;
+        assert_eq!(sum.coordinates[0], Rational::new(3, 4).unwrap());
+        assert_eq!(sum.coordinates[1], Rational::new(1, 1).unwrap());
     }
 
     #[test]
-    fn test_vector_size_mismatch() {
-        let v1 = Vector::new(2);
-        let v2 = Vector::new(3);
-        assert_eq!(
-            v1.clone() + v2.clone(),
-            Err(crate::Error::WrongInputParameter)
-        );
-        assert_eq!(v1 - v2, Err(crate::Error::WrongInputParameter));
-    }
-    #[test]
-    fn test_cross_product() {
-        let v1 = Vector::from([Rational::from(1), Rational::from(0), Rational::from(0)].as_slice());
-        let v2 = Vector::from([Rational::from(0), Rational::from(1), Rational::from(0)].as_slice());
-        let cross = v1.cross(&v2).unwrap();
-        assert_eq!(
-            cross,
-            Vector::from([Rational::from(0), Rational::from(0), Rational::from(1)].as_slice())
-        );
+    fn test_sub_trait() {
+        let v1 = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 1).unwrap()]);
+        let v2 = Vector::new([Rational::new(1, 4).unwrap(), Rational::new(1, 2).unwrap()]);
+        let diff = v1 - v2;
+        assert_eq!(diff.coordinates[0], Rational::new(1, 4).unwrap());
+        assert_eq!(diff.coordinates[1], Rational::new(1, 2).unwrap());
     }
 
     #[test]
-    fn test_cross_product_non_orthogonal() {
-        let v1 = Vector::from([Rational::from(1), Rational::from(2), Rational::from(3)].as_slice());
-        let v2 = Vector::from([Rational::from(4), Rational::from(5), Rational::from(6)].as_slice());
-        let cross = v1.cross(&v2).unwrap();
-        assert_eq!(
-            cross,
-            Vector::from([Rational::from(-3), Rational::from(6), Rational::from(-3)].as_slice())
-        );
+    fn test_mul_trait() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let scaled = v * Rational::new(2, 1).unwrap();
+        assert_eq!(scaled.coordinates[0], Rational::new(1, 1).unwrap());
+        assert_eq!(scaled.coordinates[1], Rational::new(2, 3).unwrap());
     }
 
     #[test]
-    fn test_cross_product_wrong_dimensions() {
-        let v1 = Vector::new(2);
-        let v2 = Vector::new(3);
-        assert_eq!(v1.cross(&v2), Err(crate::Error::WrongInputParameter));
+    fn test_div_trait() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let divided = v / Rational::new(2, 1).unwrap();
+        assert_eq!(divided.coordinates[0], Rational::new(1, 4).unwrap());
+        assert_eq!(divided.coordinates[1], Rational::new(1, 6).unwrap());
+    }
+
+    #[test]
+    #[should_panic(expected = "Division by zero")]
+    fn test_div_by_zero() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(1, 3).unwrap()]);
+        let _ = v / Rational::new(0, 1).unwrap();
+    }
+
+    #[test]
+    fn test_neg_trait() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(-1, 3).unwrap()]);
+        let neg = -v;
+        assert_eq!(neg.coordinates[0], Rational::new(-1, 2).unwrap());
+        assert_eq!(neg.coordinates[1], Rational::new(1, 3).unwrap());
+    }
+    #[test]
+    fn test_display() {
+        let v = Vector::new([Rational::new(1, 2).unwrap(), Rational::new(3, 4).unwrap()]);
+        assert_eq!(format!("{}", v), "[1/2, 3/4]");
+    }
+
+    #[test]
+    fn test_from_array() {
+        let v: Vector<2> = [1, 2].into();
+        assert_eq!(v.coordinates[0], Rational::new(1, 1).unwrap());
+        assert_eq!(v.coordinates[1], Rational::new(2, 1).unwrap());
     }
 }
