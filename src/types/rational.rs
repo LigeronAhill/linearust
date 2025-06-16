@@ -308,7 +308,7 @@ impl Neg for Rational {
         }
     }
 }
-impl<'a> Neg for &'a Rational {
+impl Neg for &Rational {
     type Output = Rational;
     fn neg(self) -> Rational {
         Rational {
@@ -327,7 +327,7 @@ impl Add for Rational {
         Rational::new(numerator, denominator).unwrap()
     }
 }
-impl<'a> Add for &'a Rational {
+impl Add for &Rational {
     type Output = Rational;
 
     fn add(self, other: Self) -> Rational {
@@ -348,7 +348,7 @@ impl Sub for Rational {
         Rational::new(numerator, denominator).unwrap()
     }
 }
-impl<'a> Sub for &'a Rational {
+impl Sub for &Rational {
     type Output = Rational;
 
     fn sub(self, other: Self) -> Rational {
